@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 const TABS = [
   { key: "text", label: "Text", icon: Type },
-  { key: "pdf", label: "Pitch Deck", icon: FileText },
+  { key: "pdf", label: "Upload File", icon: FileText },
   { key: "url", label: "Website URL", icon: LinkIcon },
 ];
 
@@ -97,12 +97,8 @@ export default function Landing() {
   const onFilePick = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Only PDF files are supported.");
-      return;
-    }
-    if (f.size > 8 * 1024 * 1024) {
-      toast.error("PDF too large (max 8MB).");
+    if (f.size > 15 * 1024 * 1024) {
+      toast.error("File too large (max 15 MB).");
       return;
     }
     setPdfFile(f);
@@ -150,7 +146,7 @@ export default function Landing() {
               </h1>
 
               <p className="mt-8 max-w-xl text-base md:text-lg text-[#A1A1AA] leading-[1.8]">
-                Submit your startup idea — as text, a pitch deck PDF, or a website URL.
+                Submit your startup idea — as text, any file (pitch deck, doc, image), or a website URL.
                 Our AI angel investor delivers <span className="text-[#FAFAFA]">5 brutal reality checks</span> and <span className="text-[#FAFAFA]">5 sharp fixes</span>.
                 No pleasantries. No &ldquo;interesting, but&rdquo;.
               </p>
@@ -233,12 +229,11 @@ export default function Landing() {
 
                   {tab === "pdf" && (
                     <div>
-                      <label className="label-tag">Upload your pitch deck (PDF)</label>
+                      <label className="label-tag">Upload any file</label>
                       <input
                         ref={fileInputRef}
                         data-testid="landing-pdf-input"
                         type="file"
-                        accept="application/pdf,.pdf"
                         onChange={onFilePick}
                         className="hidden"
                       />
@@ -250,8 +245,10 @@ export default function Landing() {
                           className="mt-3 w-full border border-dashed border-[#27272A] p-8 flex flex-col items-center justify-center gap-3 hover:border-[#FF3B30] hover:bg-[#0f0f0f] transition-colors"
                         >
                           <Upload className="h-6 w-6 text-[#FFD60A]" />
-                          <p className="text-sm text-[#FAFAFA]">Drop a PDF or click to upload</p>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-[#71717A]">Max 8 MB · Up to 30 pages</p>
+                          <p className="text-sm text-[#FAFAFA]">Drop a file or click to upload</p>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-[#71717A] text-center">
+                            PDF · PPTX · DOCX · Images · Text · Max 15 MB
+                          </p>
                         </button>
                       ) : (
                         <div className="mt-3 border border-[#27272A] p-4 flex items-center justify-between gap-3">
@@ -350,7 +347,7 @@ export default function Landing() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[#27272A] border border-[#27272A]">
           {[
-            { n: "01", t: "Submit", d: "Paste your idea, drop a pitch deck PDF, or share a landing page URL. Even the 'AI for pets' one." },
+            { n: "01", t: "Submit", d: "Paste your idea, drop any file (PDF, PPTX, DOCX, images, text), or share a landing page URL." },
             { n: "02", t: "Get Roasted", d: "Our AI angel investor scores it 1–10, writes 5 brutal callouts and 5 sharp fixes." },
             { n: "03", t: "Share or Cry", d: "Download the zine-style card. Post it anywhere. Cry a little. Rebuild stronger." },
           ].map((s) => (

@@ -10,6 +10,7 @@ import uuid
 import hmac
 import hashlib
 import io
+import tempfile
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
@@ -20,8 +21,10 @@ import razorpay
 import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
+from docx import Document as DocxDocument
+from pptx import Presentation as PptxPresentation
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -84,6 +87,98 @@ def _extract_pdf_text(data: bytes) -> str:
         return "\n".join(chunks).strip()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not read PDF: {e}")
+
+
+def _extract_docx_text(data: bytes) -> str:
+    try:
+        doc = DocxDocument(io.BytesIO(data))
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                if cells:
+                    paragraphs.append(" | ".join(cells))
+        return "\n".join(paragraphs).strip()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read DOCX: {e}")
+
+
+def _extract_pptx_text(data: bytes) -> str:
+    try:
+        prs = PptxPresentation(io.BytesIO(data))
+        chunks = []
+        for i, slide in enumerate(prs.slides, 1):
+            slide_texts = []
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text and shape.text.strip():
+                    slide_texts.append(shape.text.strip())
+            if slide_texts:
+                chunks.append(f"[Slide {i}]\n" + "\n".join(slide_texts))
+        return "\n\n".join(chunks).strip()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read PPTX: {e}")
+
+
+TEXTY_EXTS = {".txt", ".md", ".csv", ".tsv", ".rtf", ".html", ".htm", ".json", ".log", ".xml", ".yml", ".yaml"}
+IMAGE_MIMES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/heic", "image/heif"}
+
+
+def _extract_file_content(filename: str, content_type: str, data: bytes):
+    """
+    Returns a tuple (text_snippet_or_none, file_path_or_none, mime_for_gemini_or_none)
+    - text_snippet: extracted text to append to prompt
+    - file_path: temp file path to pass as multimodal attachment (for images / PDFs we prefer text)
+    - mime: mime type for multimodal
+    """
+    name = (filename or "").lower()
+    ext = "." + name.rsplit(".", 1)[-1] if "." in name else ""
+    ctype = (content_type or "").lower()
+
+    # PDF → extract text
+    if ext == ".pdf" or ctype == "application/pdf":
+        return (_extract_pdf_text(data), None, None)
+
+    # DOCX
+    if ext == ".docx" or ctype in {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}:
+        return (_extract_docx_text(data), None, None)
+
+    # PPTX
+    if ext == ".pptx" or ctype in {"application/vnd.openxmlformats-officedocument.presentationml.presentation"}:
+        return (_extract_pptx_text(data), None, None)
+
+    # Images → pass to Gemini as multimodal
+    if ctype in IMAGE_MIMES or ext in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif"}:
+        suffix = ext or ".png"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(data)
+        tmp.close()
+        mime = ctype if ctype in IMAGE_MIMES else ("image/jpeg" if suffix in {".jpg", ".jpeg"} else "image/png")
+        return (None, tmp.name, mime)
+
+    # Text-like → decode
+    if ext in TEXTY_EXTS or (ctype.startswith("text/") if ctype else False):
+        try:
+            txt = data.decode("utf-8", errors="ignore")
+            if ext in {".html", ".htm"}:
+                soup = BeautifulSoup(txt, "html.parser")
+                for tag in soup(["script", "style"]):
+                    tag.decompose()
+                txt = " ".join(soup.get_text(" ").split())
+            return (txt[:20000], None, None)
+        except Exception:
+            pass
+
+    # Fallback: try to decode as text anyway, else reject
+    try:
+        txt = data.decode("utf-8")
+        if txt.strip():
+            return (txt[:20000], None, None)
+    except Exception:
+        pass
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unsupported file type: {ext or ctype or 'unknown'}. Try PDF, PPTX, DOCX, images, or text files.",
+    )
 
 
 def _extract_url_text(url: str) -> str:
@@ -248,14 +343,22 @@ Rules:
 - Return only JSON. No commentary."""
 
 
-async def generate_roast_ai(startup_name: str, idea: str) -> dict:
+async def generate_roast_ai(startup_name: str, idea: str, file_attachments: Optional[List[dict]] = None) -> dict:
     session_id = str(uuid.uuid4())
     chat = (
         LlmChat(api_key=EMERGENT_LLM_KEY, session_id=session_id, system_message=ROAST_SYSTEM)
         .with_model("gemini", "gemini-3-flash-preview")
     )
-    user_text = f"Startup Name: {startup_name or 'Unnamed'}\n\nIdea:\n{idea}\n\nRoast it. Return ONLY the JSON."
-    msg = UserMessage(text=user_text)
+    user_text = f"Startup Name: {startup_name or 'Unnamed'}\n\nIdea / Materials:\n{idea}\n\nRoast it. Return ONLY the JSON."
+
+    file_contents = None
+    if file_attachments:
+        file_contents = [
+            FileContentWithMimeType(mime_type=a["mime"], file_path=a["path"])
+            for a in file_attachments
+        ]
+
+    msg = UserMessage(text=user_text, file_contents=file_contents) if file_contents else UserMessage(text=user_text)
     response = await chat.send_message(msg)
     text = (response or "").strip()
     # Strip markdown fences if present
@@ -301,21 +404,34 @@ async def generate_roast(
 ):
     # Build combined source material
     parts = []
+    file_attachments = []  # multimodal image/PDF attachments for the LLM
+    temp_paths_to_clean = []
+
     if idea and idea.strip():
         parts.append(idea.strip())
     if source_url and source_url.strip():
         parts.append("\n---\nFrom URL:\n" + _extract_url_text(source_url.strip()))
     if pdf_file is not None:
         data = await pdf_file.read()
-        if len(data) > 8 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="PDF too large (max 8MB)")
-        pdf_text = _extract_pdf_text(data)
-        if pdf_text:
-            parts.append("\n---\nFrom Pitch Deck PDF:\n" + pdf_text[:8000])
+        if len(data) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large (max 15 MB)")
+        extracted_text, tmp_path, tmp_mime = _extract_file_content(
+            pdf_file.filename or "upload", pdf_file.content_type or "", data
+        )
+        if extracted_text:
+            parts.append(f"\n---\nFrom uploaded file ({pdf_file.filename}):\n" + extracted_text[:8000])
+        if tmp_path:
+            file_attachments.append({"path": tmp_path, "mime": tmp_mime})
+            temp_paths_to_clean.append(tmp_path)
+            parts.append(f"\n---\nUploaded image attached: {pdf_file.filename}. Analyse it as part of the pitch.")
 
     combined = "\n".join(parts).strip()
-    if len(combined) < 15:
-        raise HTTPException(status_code=400, detail="Not enough content to roast. Give us more (min 15 chars or a valid PDF/URL).")
+    if not combined and not file_attachments:
+        raise HTTPException(status_code=400, detail="Not enough content to roast. Add a description, file, or URL.")
+    if not combined:
+        combined = "See attached image(s)."
+    if len(combined) < 15 and not file_attachments:
+        raise HTTPException(status_code=400, detail="Give us more (min 15 chars or a valid file/URL).")
     if len(combined) > 12000:
         combined = combined[:12000]
 
@@ -332,9 +448,16 @@ async def generate_roast(
         raise HTTPException(status_code=402, detail="Free roast consumed. Pay Rs 49 for another savage review.")
 
     # Generate roast
-    roast_data = await generate_roast_ai(startup_name or "", combined)
+    try:
+        roast_data = await generate_roast_ai(startup_name or "", combined, file_attachments=file_attachments)
+    finally:
+        for p in temp_paths_to_clean:
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
 
-    # Save roast (store original idea text; pdf/url content is not stored raw)
+    # Save roast
     roast_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     stored_idea = idea.strip() if idea and idea.strip() else combined[:2000]
