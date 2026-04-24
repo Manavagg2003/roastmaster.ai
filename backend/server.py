@@ -17,6 +17,7 @@ from pathlib import Path
 from pydantic import BaseModel, EmailStr
 import pg8000
 from pypdf import PdfReader
+import pdfplumber
 from pptx import Presentation as PptxPresentation
 import jwt as pyjwt
 import razorpay
@@ -289,6 +290,20 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
 
 
 def _extract_pdf_text(data: bytes) -> str:
+    # Try pdfplumber first
+    try:
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            text = ""
+            for page in pdf.pages[:30]:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+            if text.strip():
+                return text.strip()
+    except Exception as e:
+        logger.warning(f"pdfplumber failed to extract text: {e}")
+
+    # Fallback to pypdf
     try:
         reader = PdfReader(io.BytesIO(data))
         chunks = []
@@ -578,11 +593,11 @@ async def generate_roast(request: Request, current=Depends(get_current_user)):
 
     combined = "\n".join(parts).strip()
     if not combined and not file_attachments:
-        raise HTTPException(status_code=400, detail="Not enough content to roast. Add a description, file, or URL.")
+        raise HTTPException(status_code=400, detail="No content detected to roast. Please upload a valid file or add a text description.")
     if not combined:
         combined = "See attached image(s)."
     if len(combined) < 15 and not file_attachments:
-        raise HTTPException(status_code=400, detail="Give us more (min 15 chars or a valid file/URL).")
+        raise HTTPException(status_code=400, detail="Not enough content to roast. Please add some more text (min 15 characters) or a more detailed file.")
     if len(combined) > 12000:
         combined = combined[:12000]
 

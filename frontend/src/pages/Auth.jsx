@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
@@ -7,7 +7,14 @@ import { toast } from "sonner";
 
 export default function Auth({ mode }) {
   const isLogin = mode === "login";
-  const { login, register } = useAuth();
+  const { login, register, user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
   const nav = useNavigate();
   const loc = useLocation();
   const [email, setEmail] = useState("");

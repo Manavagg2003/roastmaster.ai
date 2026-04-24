@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import base64
 import mimetypes
 from pathlib import Path
-import requests
+import httpx
 
 
 EMERGENT_BASE_URL = "https://integrations.emergentagent.com/llm/v1"
@@ -49,15 +49,15 @@ class LlmChat:
             "messages": self._build_messages(message),
         }
 
-        response = requests.post(
-            f"{EMERGENT_BASE_URL}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=180,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.post(
+                f"{EMERGENT_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
 
     def _build_messages(self, message: UserMessage):
         messages = []

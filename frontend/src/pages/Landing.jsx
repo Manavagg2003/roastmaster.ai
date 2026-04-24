@@ -42,7 +42,7 @@ export default function Landing() {
   const buildFormData = () => {
     const fd = new FormData();
     fd.append("startup_name", startupName);
-    if (tab === "text") fd.append("idea", idea);
+    fd.append("idea", idea);
     if (tab === "pdf" && pdfFile) fd.append("pdf_file", pdfFile);
     if (tab === "url") fd.append("source_url", sourceUrl);
     return fd;
