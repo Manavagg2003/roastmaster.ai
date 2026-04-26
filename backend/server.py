@@ -15,6 +15,9 @@ import logging
 import os
 from pathlib import Path
 from pydantic import BaseModel, EmailStr
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import pg8000
 from pypdf import PdfReader
 import pdfplumber
@@ -87,6 +90,15 @@ CREATE TABLE IF NOT EXISTS payments (
     payment_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     paid_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    email TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 """
 
@@ -241,6 +253,24 @@ class VerifyPaymentInput(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
+
+
+class FeedbackInput(BaseModel):
+    type: str  # 'feedback' or 'feature_request'
+    content: str
+    email: Optional[str] = None
+
+
+async def get_optional_user(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        return _fetch_user_by_id(user_id)
+    except Exception:
+        return None
 
 
 def hash_password(pw: str) -> str:
@@ -801,6 +831,48 @@ async def verify_payment(payload: VerifyPaymentInput, current=Depends(get_curren
             )
             user = cur.fetchone()
     return {"status": "success", "user": _row_to_user_public(user)}
+
+
+@api_router.post("/feedback")
+async def submit_feedback(payload: FeedbackInput, current=Depends(get_optional_user)):
+    feedback_id = str(uuid.uuid4())
+    user_id = current["id"] if current else None
+    user_email = current["email"] if current else payload.email
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO feedback (id, user_id, type, content, email, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (feedback_id, user_id, payload.type, payload.content, user_email, datetime.now(timezone.utc)),
+            )
+
+    # Email sending logic
+    try:
+        smtp_server = os.environ.get("SMTP_SERVER")
+        smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_pass = os.environ.get("SMTP_PASS")
+        
+        if smtp_server and smtp_user and smtp_pass:
+            msg = MIMEMultipart()
+            msg['From'] = smtp_user
+            msg['To'] = "contact@pixelbond.in"
+            msg['Subject'] = f"New {payload.type.replace('_', ' ').title()} from Roastmaster.ai"
+            
+            body = f"Type: {payload.type}\nContent: {payload.content}\nUser Email: {user_email or 'Not provided'}\nUser ID: {user_id or 'Guest'}"
+            msg.attach(MIMEText(body, 'plain'))
+            
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+    except Exception as e:
+        logger.error(f"Failed to send feedback email: {e}")
+
+    return {"status": "success", "message": "Feedback submitted successfully"}
 
 
 @api_router.get("/")

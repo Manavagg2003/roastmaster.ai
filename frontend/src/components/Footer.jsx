@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Flame } from "lucide-react";
+import { FeedbackModal } from "./FeedbackModal";
 
 export default function Footer() {
+  const [feedbackType, setFeedbackType] = useState(null);
+
   return (
     <footer data-testid="site-footer" className="border-t border-[#27272A] bg-[#050505]">
       <div className="mx-auto max-w-7xl px-6 md:px-12 py-12 md:py-16">
@@ -40,7 +43,22 @@ export default function Footer() {
             <ul className="mt-5 space-y-2 text-sm text-[#A1A1AA]">
               <li><a href="mailto:contact@pixelbond.in" className="hover:text-[#FFD60A] transition-colors">contact@pixelbond.in</a></li>
               <li><a href="mailto:xenithfounders@gmail.com" className="hover:text-[#FFD60A] transition-colors">xenithfounders@gmail.com</a></li>
-              <li><a href="tel:+919350015443" className="hover:text-[#FFD60A] transition-colors">+91 93500 15443</a></li>
+              <li className="pt-2">
+                <button 
+                  onClick={() => setFeedbackType('feedback')} 
+                  className="text-[#FFD60A] hover:underline transition-colors font-medium"
+                >
+                  Give Feedback
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => setFeedbackType('feature_request')} 
+                  className="text-[#FFD60A] hover:underline transition-colors font-medium"
+                >
+                  Request a Feature
+                </button>
+              </li>
             </ul>
           </div>
         </div>
@@ -50,6 +68,12 @@ export default function Footer() {
           <span>No egos were harmed in the making of this product. Probably.</span>
         </div>
       </div>
+
+      <FeedbackModal 
+        isOpen={!!feedbackType} 
+        onClose={() => setFeedbackType(null)} 
+        type={feedbackType || 'feedback'} 
+      />
     </footer>
   );
 }
