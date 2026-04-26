@@ -54,23 +54,7 @@ export default function Contact() {
               </span>
             </a>
 
-            <a
-              href="tel:+919350015443"
-              data-testid="contact-phone"
-              className="bg-[#050505] p-8 md:p-10 hover:bg-[#0A0A0A] transition-colors group"
-            >
-              <Phone className="h-6 w-6 text-[#32D74B] mb-5" />
-              <p className="label-tag">Phone</p>
-              <p className="mt-3 font-display text-2xl md:text-3xl tracking-tight">
-                +91 93500 15443
-              </p>
-              <p className="mt-3 text-sm text-[#A1A1AA]">
-                Mon–Fri, 11am–7pm IST. WhatsApp preferred.
-              </p>
-              <span className="mt-5 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.25em] text-[#FFD60A] group-hover:gap-2 transition-all">
-                Call now <ArrowRight className="h-3.5 w-3.5" />
-              </span>
-            </a>
+
           </div>
 
           <div className="mt-14 border border-[#27272A] p-8 md:p-12">

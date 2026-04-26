@@ -21,3 +21,7 @@ export function loadRazorpay() {
     document.body.appendChild(script);
   });
 }
+
+export async function submitFeedback(data) {
+  return api.post("/feedback", data);
+}
