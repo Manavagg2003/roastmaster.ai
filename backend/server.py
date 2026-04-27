@@ -809,8 +809,13 @@ async def get_roast(roast_id: str):
     if not roast:
         raise HTTPException(status_code=404, detail="Roast not found")
     
-    # Auto-backfill if premium but missing data
-    if roast.get("is_premium") and (not roast.get("competitors") or not roast.get("tam_analysis")):
+    # Auto-backfill if premium but missing v3 data
+    if roast.get("is_premium") and (
+        not roast.get("competitors") or 
+        not roast.get("tam_analysis") or 
+        not roast.get("tam_value") or 
+        not roast.get("gtm_strategy")
+    ):
         await _backfill_premium_data(roast["id"], roast["startup_name"], roast["idea"])
         # Fetch again after backfill
         with get_db() as conn:
@@ -966,9 +971,14 @@ async def verify_payment(payload: VerifyPaymentInput, current=Depends(get_curren
                 cur.execute("UPDATE roasts SET is_premium = TRUE WHERE id = %s", (roast_id,))
                 
                 # Check if we need to backfill data immediately
-                cur.execute("SELECT idea, startup_name, competitors, tam_analysis FROM roasts WHERE id = %s", (roast_id,))
+                cur.execute("SELECT idea, startup_name, competitors, tam_analysis, tam_value, gtm_strategy FROM roasts WHERE id = %s", (roast_id,))
                 r = cur.fetchone()
-                if r and (not r.get("competitors") or not r.get("tam_analysis") or r.get("tam_analysis") == ""):
+                if r and (
+                    not r.get("competitors") or 
+                    not r.get("tam_analysis") or 
+                    not r.get("tam_value") or 
+                    not r.get("gtm_strategy")
+                ):
                     await _backfill_premium_data(roast_id, r["startup_name"], r["idea"])
                 # Fetch user again to return consistent response
                 cur.execute("SELECT id, email, name, used_free_roast, paid_roasts_balance FROM users WHERE id = %s", (current["id"],))
