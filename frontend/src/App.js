@@ -14,6 +14,7 @@ import Refund from "@/pages/Refund";
 import Contact from "@/pages/Contact";
 import ForgotPassword from "@/pages/ForgotPassword";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
           </Routes>
           <Toaster theme="dark" position="top-right" />
           <Analytics />
+          <SpeedInsights />
         </BrowserRouter>
       </AuthProvider>
     </div>
