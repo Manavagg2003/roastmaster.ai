@@ -206,7 +206,7 @@ export default function Roast() {
               <p className="label-tag mb-4 flex items-center gap-2"><Users className="h-3 w-3" /> Market Rivals</p>
               <div className={roast.is_premium ? "" : "blur-md select-none opacity-40"}>
                 <ul className="space-y-3">
-                  {(roast.is_premium ? roast.competitors : ["Placeholder A", "Placeholder B", "Placeholder C"]).map((comp, i) => (
+                  {(roast.is_premium ? (roast.competitors || []) : ["Placeholder A", "Placeholder B", "Placeholder C"]).map((comp, i) => (
                     <li key={i} className="text-sm font-mono flex items-center gap-2">
                       <span className="text-[#FF3B30] text-[10px]">0{i+1}</span> {comp}
                     </li>
@@ -266,7 +266,7 @@ export default function Roast() {
               <p className="label-tag mb-4 flex items-center gap-2"><Target className="h-3 w-3" /> Go-To-Market Strategy</p>
               <div className={roast.is_premium ? "" : "blur-md select-none opacity-40"}>
                 <ul className="space-y-3">
-                  {(roast.is_premium ? roast.gtm_strategy : ["Step 1", "Step 2", "Step 3", "Step 4"]).map((step, i) => (
+                  {(roast.is_premium ? (roast.gtm_strategy || []) : ["Step 1", "Step 2", "Step 3", "Step 4"]).map((step, i) => (
                     <li key={i} className="text-sm leading-relaxed flex gap-3">
                       <span className="text-[#32D74B] font-mono shrink-0">→</span>
                       <span className="text-[#D1D1D6]">{step}</span>
