@@ -29,7 +29,6 @@ def migrate():
         cur = conn.cursor()
         
         print("Adding columns to roasts table...")
-        # Add columns if they don't exist
         columns = [
             ("is_premium", "BOOLEAN DEFAULT FALSE"),
             ("competitors", "JSONB"),
@@ -41,8 +40,10 @@ def migrate():
         for col_name, col_type in columns:
             try:
                 cur.execute(f"ALTER TABLE roasts ADD COLUMN {col_name} {col_type}")
+                conn.commit()
                 print(f"Added column {col_name}")
             except Exception as e:
+                conn.rollback()
                 if "already exists" in str(e).lower():
                     print(f"Column {col_name} already exists")
                 else:
@@ -51,8 +52,10 @@ def migrate():
         print("Updating payments table...")
         try:
             cur.execute("ALTER TABLE payments ADD COLUMN roast_id TEXT REFERENCES roasts(id) ON DELETE SET NULL")
+            conn.commit()
             print("Added roast_id to payments")
         except Exception as e:
+            conn.rollback()
             if "already exists" in str(e).lower():
                 print("Column roast_id already exists in payments")
             else:
@@ -60,14 +63,15 @@ def migrate():
 
         try:
             cur.execute("ALTER TABLE payments ADD COLUMN payment_type TEXT DEFAULT 'roast_credit'")
+            conn.commit()
             print("Added payment_type to payments")
         except Exception as e:
+            conn.rollback()
             if "already exists" in str(e).lower():
                 print("Column payment_type already exists in payments")
             else:
                 print(f"Error adding payment_type to payments: {e}")
                 
-        conn.commit()
         print("Migration complete!")
     except Exception as e:
         print(f"Migration failed: {e}")
